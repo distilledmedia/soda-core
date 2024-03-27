@@ -18,6 +18,8 @@ class UserDefinedFailedRowsCheckCfg(CheckCfg):
         samples_columns: list | None = None,
         fail_threshold_cfg: ThresholdCfg | None = None,
         warn_threshold_cfg: ThresholdCfg | None = None,
+        description: str | None = None,
+        message: str | None = None
     ):
         super().__init__(
             source_header,
@@ -27,6 +29,8 @@ class UserDefinedFailedRowsCheckCfg(CheckCfg):
             name,
             samples_limit=samples_limit,
             samples_columns=samples_columns,
+            description=description,
+            message=message
         )
         self.query: str | None = query
         self.fail_threshold_cfg: ThresholdCfg | None = fail_threshold_cfg
