@@ -552,7 +552,8 @@ class DataSource:
     # For a table, get the columns metadata
     ############################################
 
-    @lru_cache(maxsize=None)
+    # can't use lru cache with non-hashabhle arguments (list)
+    # @lru_cache(maxsize=None)
     def get_table_columns(
         self,
         table_name: str,

@@ -1323,6 +1323,8 @@ class SodaCLParser(Parser):
         other_data_source_name = antlr_identifier2.getText() if antlr_identifier2 else None
 
         name = None
+        description = None
+        message = None
         if isinstance(check_configurations, dict):
             self._push_path_element(check_str, check_configurations)
             name = self._get_optional(NAME, str)
@@ -1467,6 +1469,7 @@ class SodaCLParser(Parser):
             fail_freshness_threshold=fail_freshness_threshold,
             warn_freshness_threshold=warn_freshness_threshold,
         )
+    
 
     def parse_staleness_threshold_text(self, staleness_threshold_text):
         if isinstance(staleness_threshold_text, str):
@@ -1897,11 +1900,18 @@ class SodaCLParser(Parser):
         # TODO atm, It is not necessary that the column variable names in the metrics match.  So they are discarded for now.
         #  That's because *all* column references in the checks will be replaced anyways.
         for_each_column_cfg = ForEachColumnCfg()
-        self.__parse_nameset_list(header_content, for_each_column_cfg)
-        for_each_column_cfg.table_alias_name = self.__antlr_parse_identifier_name_from_header(
+        for_each_column_cfg.column_alias_name = self.__antlr_parse_identifier_name_from_header(
             antlr_checks_for_each_column_header
         )
-        check_cfgs = self._get_required("checks", dict)
+
+        columns = self._get_optional("columns", list)
+        if columns:
+            self._push_path_element("columns", columns)
+            self.__parse_nameset_list(columns, for_each_column_cfg)
+            self._pop_path_element()
+
+
+        check_cfgs = self._get_required("checks", list)
         for_each_column_cfg.check_cfgs = self.__parse_checks_in_for_each_section(header_str, check_cfgs)
         for_each_column_cfg.location = self.location
         self.sodacl_cfg.for_each_column_cfgs.append(for_each_column_cfg)
