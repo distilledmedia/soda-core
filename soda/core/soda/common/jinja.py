@@ -27,14 +27,14 @@ class Jinja:
     environment = create_os_environment()
 
     @staticmethod
-    def resolve(template: str, variables: dict = None) -> str:
+    def resolve(template: str, variables: dict = None, macros: str = '') -> str:
         """
         Convenience method that funnels Jinja exceptions into parselog errors.
         This method throws no exceptions.  Returns None in case of Jinja exceptions.
         """
         if not isinstance(variables, dict):
             variables = {}
-        jinja_template = Jinja.environment.from_string(template)
+        jinja_template = Jinja.environment.from_string(macros + template)
         rendered_value = jinja_template.render(variables)
         return rendered_value
 

@@ -171,6 +171,8 @@ class SodaCLParser(Parser):
                     self.__parse_data_source_checks_section(header_str, header_content)
                 elif "variables" == header_str:
                     self.__parse_header_section(header_str, header_content)
+                elif "macros" == header_str:
+                    self.__parse_header_section_macros(header_str, header_content)
                 else:
                     antlr_parser = self.antlr_parse_section_header(header_str)
                     if antlr_parser.is_ok():
@@ -386,6 +388,21 @@ class SodaCLParser(Parser):
         else:
             self.logs.error(f"Variables content must be a dict.  Was {type(header_content).__name__}")
 
+    def __parse_header_section_macros(self, header_str, header_content):
+        if isinstance(header_content, dict):
+            macros = self.sodacl_cfg.scan._macros
+            for macro_file in header_content:
+                macro_value = header_content[macro_file]
+                macro_alias = macro_file.split(' ')[0]
+                fs = file_system()
+                macros_file_path = fs.join(fs.dirname(self.path_stack.file_path), macro_value.strip())
+                macros_definitions = dedent(fs.file_read_as_str(macros_file_path)).strip()
+                macros[macro_alias] = macros_definitions
+        else:
+            self.logs.error(f"Macros content must be a dict.  Was {type(header_content).__name__}")
+        
+            
+
     def parse_group_by_cfg(self, check_configurations, check_str, header_str):
         if isinstance(check_configurations, dict):
             from soda.sodacl.group_by_check_cfg import GroupByCheckCfg
@@ -495,6 +512,8 @@ class SodaCLParser(Parser):
                             name=name,
                             query=fail_query,
                             samples_limit=samples_limit,
+                            description=description,
+                            message=message
                         )
                     else:
                         self.logs.error(
@@ -948,6 +967,8 @@ class SodaCLParser(Parser):
             fail_threshold_cfg=fail_threshold_cfg,
             warn_threshold_cfg=warn_threshold_cfg,
             samples_limit=samples_limit,
+            message=message,
+            description=description
         )
 
     def __parse_configuration_threshold_condition(self, value) -> ThresholdCfg | None:

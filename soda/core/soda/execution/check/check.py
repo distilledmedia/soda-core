@@ -191,8 +191,29 @@ class Check(ABC):
         User readable description.
         """
         jinja_resolve = self.data_source_scan.scan.jinja_resolve
+        variables = self.data_source_scan.scan._variables
+        macros = self.data_source_scan.scan.get_macros_as_text()
+        context_variables = self.check_cfg.context_variables
+        if context_variables:
+            for context_variable in context_variables:
+                variables.update(context_variable)
         if self.check_cfg.description:
-            return jinja_resolve(self.check_cfg.description)
+            return jinja_resolve(macros + self.check_cfg.description, variables)
+
+    @property
+    def message(self) -> str:
+        """
+        User readable message.
+        """
+        jinja_resolve = self.data_source_scan.scan.jinja_resolve
+        variables = self.data_source_scan.scan._variables
+        context_variables = self.check_cfg.context_variables
+        if context_variables:
+            for context_variable in context_variables:
+                variables.update(context_variable)
+        macros = self.data_source_scan.scan.get_macros_as_text()
+        if self.check_cfg.message:
+            return jinja_resolve(macros + self.check_cfg.message, variables)
 
     @property
     def is_deprecated(self) -> bool:
@@ -385,7 +406,7 @@ class Check(ABC):
                 "archetype": self.archetype,
                 "diagnostics": self.get_cloud_diagnostics_dict(),
                 "description": self.description,
-                "message": self.check_cfg.message
+                "message": self.message
             }
         )
 

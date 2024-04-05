@@ -68,6 +68,7 @@ class Scan:
         self._sample_tables_result_tables: list[SampleTablesResultTable] = []
         self._logs.info(f"Soda Core {SODA_CORE_VERSION}")
         self.scan_results: dict = {}
+        self._macros: dict = {}
 
     def build_scan_results(self) -> dict:
         checks = [check.get_dict() for check in self._checks if check.outcome is not None and check.archetype is None]
@@ -710,16 +711,19 @@ class Scan:
                 )
 
                 logger.info(f"Instantiating for each for {table_names}")
+                macros = self.get_macros_as_text()
 
                 for table_name in table_names:
                     data_source_scan_cfg = self._sodacl_cfg.get_or_create_data_source_scan_cfgs(data_source_name)
                     table_cfg = data_source_scan_cfg.get_or_create_table_cfg(table_name)
                     partition_cfg = table_cfg.find_partition(None, None)
+
                     for check_cfg_template in for_each_dataset_cfg.check_cfgs:
                         check_cfg = check_cfg_template.instantiate_for_each_dataset(
                             name=self.jinja_resolve(
                                 check_cfg_template.name,
                                 variables={for_each_dataset_cfg.table_alias_name: table_name},
+                                macros=macros
                             ),
                             table_alias=for_each_dataset_cfg.table_alias_name,
                             table_name=table_name,
@@ -730,7 +734,7 @@ class Scan:
                         for attr in ['query', 'metric_query']:
                             if hasattr(check_cfg, attr):
                                 setattr(check_cfg, attr, self.jinja_resolve(
-                                    getattr(check_cfg, attr),
+                                    macros + getattr(check_cfg, attr),
                                     variables={
                                         for_each_dataset_cfg.table_alias_name: table_name
                                     }
@@ -782,33 +786,40 @@ class Scan:
                         data_source_scan_cfg = self._sodacl_cfg.get_or_create_data_source_scan_cfgs(data_source_name)
                         table_cfg = data_source_scan_cfg.get_or_create_table_cfg(table_name)
                         partition_cfg = table_cfg.find_partition(None, None)
+
+                        class ForEachColumnVariable(object):
+                            """
+                                This class is used to create a variable that represents a column in a table
+                                and to resolve placeholders in the check query.
+                            """
+                            def __init__(self, table, column):
+                                self.table=table
+                                self.column=column
+                                self.full_name = table + '.' + column
+                        
+                            def __str__(self):
+                                return self.full_name
+                        col = ForEachColumnVariable(table_name, column_name)
+                        # self.add_variables({for_each_column_cfgs.column_alias_name: col})
+
+                        macros = self.get_macros_as_text()
+                                    
                         for check_cfg_template in for_each_column_cfgs.check_cfgs:
                             check_cfg = check_cfg_template.instantiate_for_each_dataset(
                                 name=self.jinja_resolve(
                                     check_cfg_template.name,
-                                    variables={for_each_column_cfgs.column_alias_name: full_column_name},
+                                    variables={for_each_column_cfgs.column_alias_name: col},
+                                    macros=macros
                                 ),
                                 table_alias=for_each_column_cfgs.column_alias_name,
                                 table_name=table_name + '.' + column_name,
                                 partition_name=partition_cfg.partition_name,
+                                context_variables=[{for_each_column_cfgs.column_alias_name: col}]
                             )
                             
-
-                            class ForEachColumnVariable(object):
-                                """
-                                    This class is used to create a variable that represents a column in a table
-                                    and to resolve placeholders in the check query.
-                                """
-                                def __init__(self, table, column):
-                                    self.table=table
-                                    self.column=column
-                                    self.full_name = table + '.' + column
-                            
-                                def __str__(self):
-                                    return self.full_name
                                             
 
-                            col = ForEachColumnVariable(table_name, column_name)
+                            
                             # resovle for each context vars in the check query
                             #  failed rows query check has query, user defined query checks have metric_query
                             for attr in ['query', 'metric_query']:
@@ -817,7 +828,8 @@ class Scan:
                                         getattr(check_cfg, attr),
                                         variables={
                                             for_each_column_cfgs.column_alias_name: col
-                                        }
+                                        },
+                                        macros=macros
                                     ))
         
                             # column_name = check_cfg.get_column_name()
@@ -856,6 +868,7 @@ class Scan:
         definition: str,
         variables: dict[str, object] = None,
         location: Location | None = None,
+        macros: str = ''
     ):
         if isinstance(definition, str) and "${" in definition:
             from soda.common.jinja import Jinja
@@ -864,7 +877,7 @@ class Scan:
             if isinstance(variables, dict):
                 jinja_variables.update(variables)
             try:
-                return Jinja.resolve(definition, jinja_variables)
+                return Jinja.resolve(definition, jinja_variables, macros)
             except BaseException as e:
                 self._logs.error(
                     message=f"Error resolving Jinja template {definition}: {e}",
@@ -955,6 +968,9 @@ class Scan:
         elif variable_name in self._variables:
             return self._variables[variable_name]
         return default_value
+    
+    def get_macros_as_text(self):  
+        return '\n'.join(str(val) for key, val in self._macros.items())
 
     def get_scan_results(self) -> dict:
         return self.scan_results
