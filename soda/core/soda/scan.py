@@ -782,33 +782,35 @@ class Scan:
                         data_source_scan_cfg = self._sodacl_cfg.get_or_create_data_source_scan_cfgs(data_source_name)
                         table_cfg = data_source_scan_cfg.get_or_create_table_cfg(table_name)
                         partition_cfg = table_cfg.find_partition(None, None)
+
+                        class ForEachColumnVariable(object):
+                            """
+                                This class is used to create a variable that represents a column in a table
+                                and to resolve placeholders in the check query.
+                            """
+                            def __init__(self, table, column):
+                                self.table=table
+                                self.column=column
+                                self.full_name = table + '.' + column
+                        
+                            def __str__(self):
+                                return self.full_name
+                        col = ForEachColumnVariable(table_name, column_name)
+                                    
                         for check_cfg_template in for_each_column_cfgs.check_cfgs:
                             check_cfg = check_cfg_template.instantiate_for_each_dataset(
                                 name=self.jinja_resolve(
                                     check_cfg_template.name,
-                                    variables={for_each_column_cfgs.column_alias_name: full_column_name},
+                                    variables={for_each_column_cfgs.column_alias_name: col},
                                 ),
                                 table_alias=for_each_column_cfgs.column_alias_name,
                                 table_name=table_name + '.' + column_name,
                                 partition_name=partition_cfg.partition_name,
                             )
                             
-
-                            class ForEachColumnVariable(object):
-                                """
-                                    This class is used to create a variable that represents a column in a table
-                                    and to resolve placeholders in the check query.
-                                """
-                                def __init__(self, table, column):
-                                    self.table=table
-                                    self.column=column
-                                    self.full_name = table + '.' + column
-                            
-                                def __str__(self):
-                                    return self.full_name
                                             
 
-                            col = ForEachColumnVariable(table_name, column_name)
+                            
                             # resovle for each context vars in the check query
                             #  failed rows query check has query, user defined query checks have metric_query
                             for attr in ['query', 'metric_query']:
