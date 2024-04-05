@@ -149,3 +149,4 @@ reports/*
 *.DS_Store
 
 *.lock
+soda/core/soda/sodacl/antlr/soda-core.code-workspace

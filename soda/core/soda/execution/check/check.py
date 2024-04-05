@@ -184,6 +184,15 @@ class Check(ABC):
                 name += f" fail {source_cfg['fail']}"
 
         return jinja_resolve(name)
+    
+    @property
+    def description(self) -> str:
+        """
+        User readable description.
+        """
+        jinja_resolve = self.data_source_scan.scan.jinja_resolve
+        if self.check_cfg.description:
+            return jinja_resolve(self.check_cfg.description)
 
     @property
     def is_deprecated(self) -> bool:
@@ -375,6 +384,8 @@ class Check(ABC):
                 "outcomeReasons": self.outcome_reasons,
                 "archetype": self.archetype,
                 "diagnostics": self.get_cloud_diagnostics_dict(),
+                "description": self.description,
+                "message": self.check_cfg.message
             }
         )
 

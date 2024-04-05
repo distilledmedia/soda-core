@@ -15,6 +15,8 @@ class RowCountComparisonCheckCfg(CheckCfg):
         other_table_name: str,
         other_partition_name: Optional[str],
         other_data_source_name: Optional[str],
+        description: Optional[str] = None,
+        message: Optional[str] = None
     ):
         super().__init__(source_header, source_line, source_configurations, location, name)
         self.other_table_name: str = other_table_name

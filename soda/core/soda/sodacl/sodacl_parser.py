@@ -87,7 +87,8 @@ WHEN_REQUIRED_GROUP_MISSING = "when required group missing"
 WHEN_SCHEMA_CHANGES = "when schema changes"
 WHEN_WRONG_COLUMN_INDEX = "when wrong column index"
 WHEN_WRONG_COLUMN_TYPE = "when wrong column type"
-
+DESCRIPTION = 'description'
+MESSAGE = 'message'
 
 ALL_GROUP_VALIDATIONS = [
     WHEN_REQUIRED_GROUP_MISSING,
@@ -432,10 +433,12 @@ class SodaCLParser(Parser):
             self._push_path_element(check_str, check_configurations)
             try:
                 name = self._get_optional(NAME, str)
+                description = self._get_optional(DESCRIPTION, str)
+                message = self._get_optional(MESSAGE, str)
                 for invalid_configuration_key in [
                     key
                     for key in check_configurations
-                    if key not in [NAME, WARN, FAIL, FAIL_CONDITION, FAIL_QUERY, SAMPLES_LIMIT, ATTRIBUTES]
+                    if key not in [NAME, WARN, FAIL, FAIL_CONDITION, FAIL_QUERY, SAMPLES_LIMIT, ATTRIBUTES, DESCRIPTION, MESSAGE]
                 ]:
                     self.logs.error(
                         f'Invalid user defined failed rows check configuration key "{invalid_configuration_key}"',
@@ -463,6 +466,8 @@ class SodaCLParser(Parser):
                         fail_condition_sql_expr=fail_condition_sql_expr,
                         samples_limit=samples_limit,
                         samples_columns=samples_columns,
+                        description=description,
+                        message=message
                     )
                 elif fail_query:
                     return UserDefinedFailedRowsCheckCfg(
@@ -476,6 +481,8 @@ class SodaCLParser(Parser):
                         query=fail_query,
                         samples_limit=samples_limit,
                         samples_columns=samples_columns,
+                        description=description,
+                        message=message
                     )
                 else:
                     fail_query = self._get_optional(FAIL_QUERY, str)
@@ -543,6 +550,8 @@ class SodaCLParser(Parser):
             try:
                 name = self._get_optional(NAME, str)
                 query = self._get_required(FAIL_QUERY, str)
+                description = self._get_optional(DESCRIPTION, str)
+                message = self._get_optional(MESSAGE, str)
                 samples_limit = self._get_optional(SAMPLES_LIMIT, int)
                 samples_columns = self._get_optional(SAMPLES_COLUMNS, list)
                 fail_threshold_condition_str = self._get_optional(FAIL, str)
@@ -561,6 +570,8 @@ class SodaCLParser(Parser):
                     samples_columns=samples_columns,
                     fail_threshold_cfg=fail_threshold_cfg,
                     warn_threshold_cfg=warn_threshold_cfg,
+                    description=description,
+                    message=message
                 )
             finally:
                 self._pop_path_element()
@@ -626,6 +637,8 @@ class SodaCLParser(Parser):
         model_cfg: ModelConfigs = ModelConfigs()
         take_over_existing_anomaly_score_check = False
         severity_level_params: SeverityLevelParameters = SeverityLevelParameters()
+        description = None
+        message = None
 
         if isinstance(check_configurations, dict):
             for configuration_key in check_configurations:
@@ -633,6 +646,8 @@ class SodaCLParser(Parser):
                 self._push_path_element(check_str, check_configurations)
                 name = self._get_optional(NAME, str)
                 samples_limit = self._get_optional(SAMPLES_LIMIT, int)
+                description = self._get_optional(DESCRIPTION, str)
+                message = self._get_optional(MESSAGE, str)
                 self._push_path_element(configuration_key, configuration_value)
                 if "filter" == configuration_key:
                     filter = configuration_value.strip()
@@ -709,6 +724,8 @@ class SodaCLParser(Parser):
                     ATTRIBUTES,
                     ANOMALY_DETECTION_WARN_ONLY,
                     CONTRACT_CHECK_ID,
+                    DESCRIPTION,
+                    MESSAGE
                 ]:
                     if metric_name != "distribution_difference":
                         self.logs.error(
@@ -1306,9 +1323,13 @@ class SodaCLParser(Parser):
         other_data_source_name = antlr_identifier2.getText() if antlr_identifier2 else None
 
         name = None
+        description = None
+        message = None
         if isinstance(check_configurations, dict):
             self._push_path_element(check_str, check_configurations)
             name = self._get_optional(NAME, str)
+            description = self._get_optional(DESCRIPTION, str)
+            message = self._get_optional(MESSAGE, str)
             for configuration_key in check_configurations:
                 if configuration_key not in [NAME, ATTRIBUTES]:
                     self.logs.error(
@@ -1325,6 +1346,8 @@ class SodaCLParser(Parser):
             other_table_name=other_table_name,
             other_partition_name=other_partition_name,
             other_data_source_name=other_data_source_name,
+            description=description,
+            message=message
         )
 
     def __parse_reference_check(
@@ -1446,6 +1469,7 @@ class SodaCLParser(Parser):
             fail_freshness_threshold=fail_freshness_threshold,
             warn_freshness_threshold=warn_freshness_threshold,
         )
+    
 
     def parse_staleness_threshold_text(self, staleness_threshold_text):
         if isinstance(staleness_threshold_text, str):
@@ -1876,11 +1900,18 @@ class SodaCLParser(Parser):
         # TODO atm, It is not necessary that the column variable names in the metrics match.  So they are discarded for now.
         #  That's because *all* column references in the checks will be replaced anyways.
         for_each_column_cfg = ForEachColumnCfg()
-        self.__parse_nameset_list(header_content, for_each_column_cfg)
-        for_each_column_cfg.table_alias_name = self.__antlr_parse_identifier_name_from_header(
+        for_each_column_cfg.column_alias_name = self.__antlr_parse_identifier_name_from_header(
             antlr_checks_for_each_column_header
         )
-        check_cfgs = self._get_required("checks", dict)
+
+        columns = self._get_optional("columns", list)
+        if columns:
+            self._push_path_element("columns", columns)
+            self.__parse_nameset_list(columns, for_each_column_cfg)
+            self._pop_path_element()
+
+
+        check_cfgs = self._get_required("checks", list)
         for_each_column_cfg.check_cfgs = self.__parse_checks_in_for_each_section(header_str, check_cfgs)
         for_each_column_cfg.location = self.location
         self.sodacl_cfg.for_each_column_cfgs.append(for_each_column_cfg)

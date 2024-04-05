@@ -5,6 +5,7 @@ import logging
 import os
 import textwrap
 from datetime import datetime, timezone
+from collections import OrderedDict
 
 from soda.__version__ import SODA_CORE_VERSION
 from soda.cloud.historic_descriptor import HistoricDescriptor
@@ -724,6 +725,17 @@ class Scan:
                             table_name=table_name,
                             partition_name=partition_cfg.partition_name,
                         )
+                        # resovle for each context vars in the check query
+                        #  failed rows query check has query, user defined query checks have metric_query
+                        for attr in ['query', 'metric_query']:
+                            if hasattr(check_cfg, attr):
+                                setattr(check_cfg, attr, self.jinja_resolve(
+                                    getattr(check_cfg, attr),
+                                    variables={
+                                        for_each_dataset_cfg.table_alias_name: table_name
+                                    }
+                                ))
+                            
                         column_name = check_cfg.get_column_name()
                         if column_name:
                             column_checks_cfg = partition_cfg.get_or_create_column_checks(column_name)
@@ -732,8 +744,88 @@ class Scan:
                             partition_cfg.add_check_cfg(check_cfg)
 
     def __resolve_for_each_column_checks(self):
-        if self._sodacl_cfg.for_each_column_cfgs:
-            raise NotImplementedError("TODO")
+        # if self._sodacl_cfg.for_each_column_cfgs:
+        #     raise NotImplementedError("TODO")
+        data_source_name = self._data_source_name
+
+
+        for index, for_each_column_cfgs in enumerate(self._sodacl_cfg.for_each_column_cfgs):
+
+            table_columns = []
+            tables = OrderedDict()
+            for i in for_each_column_cfgs.includes:
+                tables.setdefault(i.table_name_filter, {})
+                tables[i.table_name_filter].setdefault('includes',[])
+                tables[i.table_name_filter]['includes'].append(i.column_name_filter)
+
+            for e in for_each_column_cfgs.excludes:
+                tables.setdefault(e.table_name_filter, {})
+                tables[e.table_name_filter].setdefault('excludes',[])
+                tables[e.table_name_filter]['excludes'].append(e.column_name_filter)
+           
+            data_source_scan = self._get_or_create_data_source_scan(data_source_name)
+            if data_source_scan:
+                for table_name, columns in tables.items():
+                    query_name = f"for_each_column_{for_each_column_cfgs.column_alias_name}[{index}]"
+                    table_columns = data_source_scan.data_source.get_table_columns(
+                        table_name= table_name,
+                        included_columns=columns.get('includes',[]),
+                        excluded_columns=columns.get('excludes',[]),
+                        query_name=query_name,
+                    )
+
+                    for column_name in table_columns:
+                        full_column_name = table_name + '.' + column_name
+
+                        logger.info(f"Instantiating for each column for {table_name}.{column_name}")
+
+                        data_source_scan_cfg = self._sodacl_cfg.get_or_create_data_source_scan_cfgs(data_source_name)
+                        table_cfg = data_source_scan_cfg.get_or_create_table_cfg(table_name)
+                        partition_cfg = table_cfg.find_partition(None, None)
+                        for check_cfg_template in for_each_column_cfgs.check_cfgs:
+                            check_cfg = check_cfg_template.instantiate_for_each_dataset(
+                                name=self.jinja_resolve(
+                                    check_cfg_template.name,
+                                    variables={for_each_column_cfgs.column_alias_name: full_column_name},
+                                ),
+                                table_alias=for_each_column_cfgs.column_alias_name,
+                                table_name=table_name + '.' + column_name,
+                                partition_name=partition_cfg.partition_name,
+                            )
+                            
+
+                            class ForEachColumnVariable(object):
+                                """
+                                    This class is used to create a variable that represents a column in a table
+                                    and to resolve placeholders in the check query.
+                                """
+                                def __init__(self, table, column):
+                                    self.table=table
+                                    self.column=column
+                                    self.full_name = table + '.' + column
+                            
+                                def __str__(self):
+                                    return self.full_name
+                                            
+
+                            col = ForEachColumnVariable(table_name, column_name)
+                            # resovle for each context vars in the check query
+                            #  failed rows query check has query, user defined query checks have metric_query
+                            for attr in ['query', 'metric_query']:
+                                if hasattr(check_cfg, attr):
+                                    setattr(check_cfg, attr, self.jinja_resolve(
+                                        getattr(check_cfg, attr),
+                                        variables={
+                                            for_each_column_cfgs.column_alias_name: col
+                                        }
+                                    ))
+        
+                            # column_name = check_cfg.get_column_name()
+                            if column_name:
+                                column_checks_cfg = partition_cfg.get_or_create_column_checks(column_name)
+                                column_checks_cfg.add_check_cfg(check_cfg)
+                            else:
+                                partition_cfg.add_check_cfg(check_cfg)
 
     def _get_or_create_data_source_scan(self, data_source_name: str) -> DataSourceScan:
         from soda.execution.data_source import DataSource
