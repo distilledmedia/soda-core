@@ -721,8 +721,9 @@ class Scan:
                     for check_cfg_template in for_each_dataset_cfg.check_cfgs:
                         check_cfg = check_cfg_template.instantiate_for_each_dataset(
                             name=self.jinja_resolve(
-                                macros + check_cfg_template.name,
+                                check_cfg_template.name,
                                 variables={for_each_dataset_cfg.table_alias_name: table_name},
+                                macros=macros
                             ),
                             table_alias=for_each_dataset_cfg.table_alias_name,
                             table_name=table_name,
@@ -799,18 +800,21 @@ class Scan:
                             def __str__(self):
                                 return self.full_name
                         col = ForEachColumnVariable(table_name, column_name)
+                        # self.add_variables({for_each_column_cfgs.column_alias_name: col})
 
                         macros = self.get_macros_as_text()
                                     
                         for check_cfg_template in for_each_column_cfgs.check_cfgs:
                             check_cfg = check_cfg_template.instantiate_for_each_dataset(
                                 name=self.jinja_resolve(
-                                    macros + check_cfg_template.name,
-                                    variables={for_each_column_cfgs.column_alias_name: col}
+                                    check_cfg_template.name,
+                                    variables={for_each_column_cfgs.column_alias_name: col},
+                                    macros=macros
                                 ),
                                 table_alias=for_each_column_cfgs.column_alias_name,
                                 table_name=table_name + '.' + column_name,
                                 partition_name=partition_cfg.partition_name,
+                                context_variables=[{for_each_column_cfgs.column_alias_name: col}]
                             )
                             
                                             
@@ -821,10 +825,11 @@ class Scan:
                             for attr in ['query', 'metric_query']:
                                 if hasattr(check_cfg, attr):
                                     setattr(check_cfg, attr, self.jinja_resolve(
-                                        macros + getattr(check_cfg, attr),
+                                        getattr(check_cfg, attr),
                                         variables={
                                             for_each_column_cfgs.column_alias_name: col
-                                        }
+                                        },
+                                        macros=macros
                                     ))
         
                             # column_name = check_cfg.get_column_name()
@@ -863,6 +868,7 @@ class Scan:
         definition: str,
         variables: dict[str, object] = None,
         location: Location | None = None,
+        macros: str = ''
     ):
         if isinstance(definition, str) and "${" in definition:
             from soda.common.jinja import Jinja
@@ -871,7 +877,7 @@ class Scan:
             if isinstance(variables, dict):
                 jinja_variables.update(variables)
             try:
-                return Jinja.resolve(definition, jinja_variables)
+                return Jinja.resolve(definition, jinja_variables, macros)
             except BaseException as e:
                 self._logs.error(
                     message=f"Error resolving Jinja template {definition}: {e}",

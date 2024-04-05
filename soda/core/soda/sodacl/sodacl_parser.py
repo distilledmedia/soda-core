@@ -512,6 +512,8 @@ class SodaCLParser(Parser):
                             name=name,
                             query=fail_query,
                             samples_limit=samples_limit,
+                            description=description,
+                            message=message
                         )
                     else:
                         self.logs.error(
@@ -965,6 +967,8 @@ class SodaCLParser(Parser):
             fail_threshold_cfg=fail_threshold_cfg,
             warn_threshold_cfg=warn_threshold_cfg,
             samples_limit=samples_limit,
+            message=message,
+            description=description
         )
 
     def __parse_configuration_threshold_condition(self, value) -> ThresholdCfg | None:
