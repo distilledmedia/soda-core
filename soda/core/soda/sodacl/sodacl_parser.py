@@ -393,6 +393,8 @@ class SodaCLParser(Parser):
             macros = self.sodacl_cfg.scan._macros
             for macro_file in header_content:
                 macro_value = header_content[macro_file]
+                # expand checks_path built-in variable
+                macro_value = self._resolve_jinja(macro_value, self.sodacl_cfg.scan._variables)
                 macro_alias = macro_file.split(' ')[0]
                 fs = file_system()
                 macros_file_path = fs.join(fs.dirname(self.path_stack.file_path), macro_value.strip())
